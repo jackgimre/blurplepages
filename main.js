@@ -255,6 +255,48 @@ function getRandomInt(max) {
     return Math.floor(Math.random()*max);
 }
 
+async function searchProfiles(message) {
+    let sender = await Profile.findOne({id: message.author.id});
+    let results = await Profile.find();
+
+    let query = {
+        qCountry: sender.qCountry,
+        qAge: sender.qAge
+    }
+    console.log(query);
+    var i = 0;
+    while(i<results.length) {
+        let profile = await client.users.fetch(results[i].id).catch(console.error);
+        let req = await Profile.findOne({id: profile.id});
+
+        if(query.qAge[0] <= req.age && query.qAge[1] >= req.age) {
+            for(j=0;j<query.qCountry.length;j++) {
+                if(req.country == query.qCountry[j]) {
+                    console.log(`${profile.username} fits your query!`)
+
+                    //send found match message
+                    profile.send(`**${message.author.username}#${message.author.discriminator}** matched to your BlurplePages account on **${message.guild.name}**`);
+                    var embed = new Discord.MessageEmbed()
+                        .setTitle(`${profile.username}#${profile.discriminator}`)
+                        .setDescription(`Send a message to ${profile.username}, they fit your search query!`)
+                        .addField('Age',req.age,true)
+                        .addField('Country',`${req.country} :flag_${lookup.byCountry(req.country).iso2.toLowerCase()}:`,true)
+                        .setThumbnail(profile.displayAvatarURL())
+                        .setFooter(message.author.username, message.author.displayAvatarURL());
+                    message.channel.send(embed);
+                    return;
+                }
+            }
+            console.log('Not a query match. Onto next profile!');
+            i++;
+        } else {
+            console.log('Not in age range!');
+            i++;
+        }
+    }
+    console.log('There are no matches :(');
+}
+
 client.once('ready', () => {
     console.log('BlurplePages is online!');
     mongoose.connect(config.mongodb_srv,{
@@ -338,6 +380,7 @@ client.on('message', async message => {
                 var req = await Profile.findOne({id: message.author.id})
                 var embed = new Discord.MessageEmbed()
                     .setTitle(message.author.username)
+                    .setDescription(req.bio)
                     .setThumbnail(message.author.displayAvatarURL())
                     .addField('Age',req.age,true)
                     .addField('Country',`${req.country} :flag_${lookup.byCountry(req.country).iso2.toLowerCase()}:`,true);
@@ -349,6 +392,7 @@ client.on('message', async message => {
                     if(req) {
                         var embed = new Discord.MessageEmbed()
                             .setTitle(mention.user.username)
+                            .setDescription(req.bio)
                             .setThumbnail(mention.user.displayAvatarURL())
                             .addField('Age',req.age,true)
                             .addField('Country',`${req.country} :flag_${lookup.byCountry(req.country).iso2.toLowerCase()}:`,true);
@@ -365,33 +409,107 @@ client.on('message', async message => {
             }
         return;
         case 'query':
-            
+            let profile = await Profile.findOne({id: message.author.id});
+            if(!args[0]) {
+                let countries = profile.qCountry;
+                let age = profile.qAge;
+                let cList = '';
+                countries.forEach(c => {
+                    cList += c+` :flag_${lookup.byCountry(c).iso2.toLowerCase()}:\n`;
+                });
+
+                var embed = new Discord.MessageEmbed()
+                    .setTitle('Search Query')
+                    .setDescription('Type: `!query help` for help!')
+                    .addField('Country',cList,true)
+                    .addField('Age',`${age[0]}-${age[1]}`,true)
+                    .setThumbnail(message.author.displayAvatarURL())
+                    .setFooter(message.author.username, message.author.displayAvatarURL());
+                message.channel.send(embed);
+            } else if(args[0] == 'country') {
+                let search = '';
+                for(i=1;i<args.length;i++) {
+                    search += args[i] + ' ';
+                }
+                console.log(search);
+                countries.forEach(async(country) => {
+                    if(country.name.toLowerCase() + ' ' == search.toLowerCase()) { 
+                        let countries = profile.qCountry;
+                        countries.push(country.name);
+                        await Profile.findOneAndUpdate({id: message.author.id},{$set: {qCountry: countries}},{new: true});
+                        let url = `https://flagpedia.net/data/flags/w580/${lookup.byCountry(country.name).iso2.toLowerCase()}.png`;
+                        var embed = new Discord.MessageEmbed()
+                            .setTitle(`${country.name} added to query!`)
+                            .setDescription('Type: `!query` to view your whole query')
+                            .setThumbnail(url)
+                            .setFooter(message.author.username, message.author.displayAvatarURL());
+                        message.channel.send(embed);
+                    }
+                });        
+            } else if (args[0] == 'age') {
+                var ageRange = args[1];
+                var ages = ageRange.split('-');
+                ages[0] = parseInt(ages[0]);
+                ages[1] = parseInt(ages[1]);
+                await Profile.findOneAndUpdate({id: message.author.id},{$set: {qAge: ages}},{new: true});
+                var embed = new Discord.MessageEmbed()
+                    .setTitle(`Ages ${ages[0]}-${ages[1]} added to query!`)
+                    .setDescription('Type: `!query` to view your whole query')
+                    .setThumbnail(message.author.displayAvatarURL())
+                    .setFooter(message.author.username, message.author.displayAvatarURL());
+                message.channel.send(embed);
+
+            } else if(args[0] == 'help') {
+                var embed = new Discord.MessageEmbed()
+                    .setTitle('Query Help')
+                    .setDescription('Commands for search query')
+                    .addField('Add Country','`!query country [country_name]`')
+                    .addField('Add Age Range','`!query age [min_age]-[max_age]`')
+                    .addField('Clear Query','`!query clear`')
+                    .setThumbnail(message.author.displayAvatarURL())
+                    .setFooter('blurplepages.com', client.user.displayAvatarURL());
+                message.channel.send(embed);
+            } else if(args[0] == 'clear') {
+                await Profile.findOneAndUpdate({id: message.author.id},{$unset: {qCountry: 1}});
+                await Profile.findOneAndUpdate({id: message.author.id},{$unset: {qAge: 1}});
+                var embed = new Discord.MessageEmbed()
+                    .setTitle('Query Cleared')
+                    .setFooter(message.author.username, message.author.displayAvatarURL());
+                message.channel.send(embed);
+            }
         return;
         case 'search':
-            let results = await Profile.find();
-            let index = getRandomInt(results.length);
-            let User = await client.users.fetch(results[index].id).catch(console.error);
-            var req = await Profile.findOne({id: User.id});
-            User.send(`**${message.author.username}#${message.author.discriminator}** matched to your BlurplePages account on **${message.guild.name}**`);
+            searchProfiles(message);
+        return;
+        case 'bio':
+            let bio = args.join(' ');
+            await Profile.findOneAndUpdate({id: message.author.id},{$set: {bio: bio}},{new: true});
             var embed = new Discord.MessageEmbed()
-                .setTitle(`${User.username}#${User.discriminator}`)
-                .setDescription(`Send a message to ${User.username}, they fit your search query!`)
-                .addField('Age',req.age,true)
-                .addField('Country',`${req.country} :flag_${lookup.byCountry(req.country).iso2.toLowerCase()}:`,true)
-                .setThumbnail(User.displayAvatarURL())
+                .setTitle('Bio Added')
+                .setDescription(bio)
+                .setThumbnail(message.author.displayAvatarURL())
                 .setFooter(message.author.username, message.author.displayAvatarURL());
             message.channel.send(embed);
         return;
         case 'help':
             var embed = new Discord.MessageEmbed()
                 .setTitle('BlurplePages Help')
-                .addField('Set Age','`!age [your_country]`')
+                .addField('Set Age','`!age [your_age]`')
                 .addField('Set Country','`!country [your_country]`')
+                .addField('Set Bio','`!bio [your_bio]`')
+                .addField('Search','`!search`')
+                .addField('Customize Search Query','`!query help`')
                 .addField('View Profile','`!profile [@user]` -- Leave @user blank for yourself')
                 .setThumbnail(message.author.displayAvatarURL())
                 .setFooter('blurplepages.com', client.user.displayAvatarURL());
             message.channel.send(embed);
         return;
+        default:
+            var embed = new Discord.MessageEmbed()
+                .setTitle('Not a valid command')
+                .setDescription('Type: `!help` for the command list')
+                .setFooter(message.author.username, message.author.displayAvatarURL());
+            message.channel.send(embed);
     }
 });    
 
