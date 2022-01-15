@@ -295,6 +295,11 @@ async function searchProfiles(message) {
         }
     }
     console.log('There are no matches :(');
+    var embed = new Discord.MessageEmbed()
+        .setTitle('Found no matches! :(')
+        .setDescription('Try widening your search query for better results')
+        .setFooter(message.author.username, message.author.displayAvatarURL());
+    message.channel.send(embed);
 }
 
 client.once('ready', () => {
@@ -318,11 +323,20 @@ client.on('message', async message => {
     switch(command) {
         case 'signup':
             if(args[0] != 'true') {
-                var embed = new Discord.MessageEmbed()
-                    .setTitle('Terms and Conditions')
-                    .setDescription('You must accept the terms and conditions to use BlurplePages.\nType: `"!signup true"` to accept')
-                    .setFooter('blurplepages.com/terms');
-                message.channel.send(embed);
+                var req = await Profile.findOne({id: message.author.id});
+                if(!req) {
+                    var embed = new Discord.MessageEmbed()
+                        .setTitle('Terms and Conditions')
+                        .setDescription('You must accept the terms and conditions to use BlurplePages.\nType: `"!signup true"` to accept')
+                        .setFooter('blurplepages.com/terms', client.user.displayAvatarURL());
+                    message.channel.send(embed);
+                } else {
+                    var embed = new Discord.MessageEmbed()
+                        .setTitle('You already have an account!')
+                        .setDescription('Type: `"!help"` for help with account customization')
+                        .setFooter(message.author.username, message.author.displayAvatarURL());
+                    message.channel.send(embed);
+                }
             } else {
                 var req = await Profile.findOne({id: message.author.id});
                 if(!req) {
@@ -356,13 +370,11 @@ client.on('message', async message => {
             message.channel.send(embed);
         return;
         case 'country':
-            let search = '';
-            args.forEach(arg => {
-                search += arg + ' ';
-            });
-
+            let search = args.join(' ');
+            console.log(search);
+            var found = false;
             countries.forEach(async(country) => {
-                if(country.name.toLowerCase() + ' ' == search.toLowerCase()) {
+                if(country.name.toLowerCase() == search.toLowerCase()) {
                     console.log(country.name);
                     await Profile.findOneAndUpdate({id: message.author.id},{$set: {country: country.name}},{new: true});
                     let url = `https://flagpedia.net/data/flags/w580/${lookup.byCountry(country.name).iso2.toLowerCase()}.png`;
@@ -374,6 +386,17 @@ client.on('message', async message => {
                     message.channel.send(embed);
                 }
             });
+            if(!found) {
+                var embed = new Discord.MessageEmbed()
+                    .setTitle(`${search}is not a valid country name!`)
+                    .setFooter(message.author.username, message.author.displayAvatarURL());
+                message.channel.send(embed); 
+            } 
+            var embed = new Discord.MessageEmbed()
+                .setTitle(`${search} is not a valid country name!`)
+                .setThumbnail(message.author.displayAvatarURL())
+                .setFooter(message.author.username, message.author.displayAvatarURL());
+            message.channel.send(embed);
         return;
         case 'profile':
             if(!args[0]) {
@@ -404,11 +427,10 @@ client.on('message', async message => {
                             .setThumbnail(mention.user.displayAvatarURL())
                         message.channel.send(embed);
                     }
-                    
                 }   
             }
         return;
-        case 'query':
+        case 'query':case 'q':
             let profile = await Profile.findOne({id: message.author.id});
             if(!args[0]) {
                 let countries = profile.qCountry;
@@ -432,8 +454,10 @@ client.on('message', async message => {
                     search += args[i] + ' ';
                 }
                 console.log(search);
+                var found = false;
                 countries.forEach(async(country) => {
                     if(country.name.toLowerCase() + ' ' == search.toLowerCase()) { 
+                        found = true
                         let countries = profile.qCountry;
                         countries.push(country.name);
                         await Profile.findOneAndUpdate({id: message.author.id},{$set: {qCountry: countries}},{new: true});
@@ -445,7 +469,13 @@ client.on('message', async message => {
                             .setFooter(message.author.username, message.author.displayAvatarURL());
                         message.channel.send(embed);
                     }
-                });        
+                });  
+                if(!found) {
+                    var embed = new Discord.MessageEmbed()
+                        .setTitle(`${search}is not a valid country name!`)
+                        .setFooter(message.author.username, message.author.displayAvatarURL());
+                    message.channel.send(embed); 
+                }  
             } else if (args[0] == 'age') {
                 var ageRange = args[1];
                 var ages = ageRange.split('-');
@@ -491,9 +521,30 @@ client.on('message', async message => {
                 .setFooter(message.author.username, message.author.displayAvatarURL());
             message.channel.send(embed);
         return;
+        case 'delete':
+            if(args[0] == 'true') {
+                await Profile.findOneAndDelete({id: message.author.id});
+                var embed = new Discord.MessageEmbed()
+                    .setTitle('Account Deleted!')
+                    .setDescription("We're sad to see you go! :(")
+                    .setThumbnail(message.author.displayAvatarURL())
+                    .setFooter(message.author.username, message.author.displayAvatarURL());
+                message.channel.send(embed);
+            } else {
+                var embed = new Discord.MessageEmbed()
+                    .setTitle('Are you sure?')
+                    .setDescription('Type: `!delete true` if you really want to permanently delete your account')
+                    .setThumbnail(message.author.displayAvatarURL())
+                    .setFooter(message.author.username, message.author.displayAvatarURL());
+                message.channel.send(embed);
+            }
+            
+
+        return;
         case 'help':
             var embed = new Discord.MessageEmbed()
                 .setTitle('BlurplePages Help')
+                .addField('Signup','`!signup` -- Must agree to TOS to signup')
                 .addField('Set Age','`!age [your_age]`')
                 .addField('Set Country','`!country [your_country]`')
                 .addField('Set Bio','`!bio [your_bio]`')
@@ -510,6 +561,7 @@ client.on('message', async message => {
                 .setDescription('Type: `!help` for the command list')
                 .setFooter(message.author.username, message.author.displayAvatarURL());
             message.channel.send(embed);
+        return;
     }
 });    
 
