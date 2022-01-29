@@ -21,6 +21,7 @@ async function searchProfiles(message) {
     }
     console.log(query);
     var i = 0;
+    let matches = [];
     while(i<results.length) {
         let profile = await client.users.fetch(results[i].id).catch(console.error);
         let req = await Profile.findOne({id: profile.id});
@@ -29,18 +30,21 @@ async function searchProfiles(message) {
             for(j=0;j<query.qCountry.length;j++) {
                 if(req.country == query.qCountry[j]) {
                     console.log(`${profile.username} fits your query!`)
+                    matches.push(profile);
 
-                    //send found match message
-                    profile.send(`**${message.author.username}#${message.author.discriminator}** matched to your BlurplePages account on **${message.guild.name}**`);
-                    var embed = new Discord.MessageEmbed()
-                        .setTitle(`${profile.username}#${profile.discriminator}`)
-                        .setDescription(`Send a message to ${profile.username}, they fit your search query!`)
-                        .addField('Age',req.age,true)
-                        .addField('Country',`${req.country} :flag_${lookup.byCountry(req.country).iso2.toLowerCase()}:`,true)
-                        .setThumbnail(profile.displayAvatarURL())
-                        .setFooter(message.author.username, message.author.displayAvatarURL());
-                    message.channel.send(embed);
-                    return;
+                    if(i+1 == results.length) {
+                        // finished loop
+                        profile = matches[getRandomInt(matches.length)];
+                        profile.send(`**${message.author.username}#${message.author.discriminator}** matched to your BlurplePages account on **${message.guild.name}**`);
+                        var embed = new Discord.MessageEmbed()
+                            .setTitle(`${profile.username}#${profile.discriminator}`)
+                            .setDescription(`Send a message to ${profile.username}, they fit your search query!`)
+                            .addField('Age',req.age,true)
+                            .addField('Country',`${req.country} :flag_${lookup.byCountry(req.country).iso2.toLowerCase()}:`,true)
+                            .setThumbnail(profile.displayAvatarURL())
+                            .setFooter(message.author.username, message.author.displayAvatarURL());
+                        message.channel.send(embed);
+                    }
                 }
             }
             console.log('Not a query match. Onto next profile!');
@@ -50,12 +54,14 @@ async function searchProfiles(message) {
             i++;
         }
     }
-    console.log('There are no matches :(');
-    var embed = new Discord.MessageEmbed()
-        .setTitle('Found no matches! :(')
-        .setDescription('Try widening your search query for better results')
-        .setFooter(message.author.username, message.author.displayAvatarURL());
-    message.channel.send(embed);
+    if(matches[0] == undefined) {
+        console.log('There are no matches :(');
+        var embed = new Discord.MessageEmbed()
+            .setTitle('Found no matches! :(')
+            .setDescription('Try widening your search query for better results')
+            .setFooter(message.author.username, message.author.displayAvatarURL());
+        message.channel.send(embed);
+    }
 }
 
 client.once('ready', () => {
@@ -146,7 +152,7 @@ client.on('message', async message => {
             if(!found) {
                 var embed = new Discord.MessageEmbed()
                     .setTitle(`${search} is not a valid country name!`)
-                    .setDescription('Visit the [country list] for the list of countries')
+                    .setDescription('Visit the [country list](https://github.com/jackgimre/blurplepages/blob/main/countries.json) for the list of countries')
                     .setThumbnail(message.author.displayAvatarURL())
                     .setFooter(message.author.username, message.author.displayAvatarURL());
                 message.channel.send(embed);
@@ -245,6 +251,7 @@ client.on('message', async message => {
                 if(!found) {
                     var embed = new Discord.MessageEmbed()
                         .setTitle(`${search}is not a valid country name!`)
+                        .setDescription('Visit the [country list](https://github.com/jackgimre/blurplepages/blob/main/countries.json) for the list of countries')
                         .setFooter(message.author.username, message.author.displayAvatarURL());
                     message.channel.send(embed); 
                 }  
