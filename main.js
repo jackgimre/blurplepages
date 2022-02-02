@@ -15,6 +15,26 @@ async function searchProfiles(message) {
     let sender = await Profile.findOne({id: message.author.id});
     let results = await Profile.find();
 
+
+    filled = true;
+    notFilledList = [];
+    if(sender.qCountry[0] == undefined) {
+        filled = false;
+        notFilledList.push('country');
+    }
+    if(sender.qAge[0] == undefined) {
+        filled = false;
+        notFilledList.push('age');
+    }
+    if(!filled) {
+        var embed = new Discord.MessageEmbed()
+            .setTitle(`Missing Query Information`)
+            .setDescription('Missing: `['+notFilledList+']`\nType: `!query help` for help')
+            .setFooter(message.author.username, message.author.displayAvatarURL());
+        message.channel.send(embed);
+        return;
+    }
+
     let query = {
         qCountry: sender.qCountry,
         qAge: sender.qAge
@@ -36,6 +56,7 @@ async function searchProfiles(message) {
                         // finished loop
                         profile = matches[getRandomInt(matches.length)];
                         profile.send(`**${message.author.username}#${message.author.discriminator}** matched to your BlurplePages account on **${message.guild.name}**`);
+                        
                         var embed = new Discord.MessageEmbed()
                             .setTitle(`${profile.username}#${profile.discriminator}`)
                             .setDescription(`Send a message to ${profile.username}, they fit your search query!`)
@@ -161,6 +182,14 @@ client.on('message', async message => {
         case 'profile':
             if(!args[0]) {
                 var req = await Profile.findOne({id: message.author.id})
+                if(!req) {
+                    var embed = new Discord.MessageEmbed()
+                        .setTitle('You do not have a BlurplePages account!')
+                        .setDescription('Type: `"!signup"` to create an account!')
+                        .setThumbnail(message.author.displayAvatarURL())
+                    message.channel.send(embed);
+                    return;
+                }
                 var embed = new Discord.MessageEmbed()
                     .setTitle(message.author.username)
                     .setDescription(req.bio)
@@ -292,6 +321,7 @@ client.on('message', async message => {
                 await Profile.findOneAndUpdate({id: message.author.id},{$unset: {qAge: 1}});
                 var embed = new Discord.MessageEmbed()
                     .setTitle('Query Cleared')
+                    .setDescription('Type: `!query help` for help!')
                     .setFooter(message.author.username, message.author.displayAvatarURL());
                 message.channel.send(embed);
             }
